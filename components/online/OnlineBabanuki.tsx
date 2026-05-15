@@ -185,44 +185,71 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
     return <p className="text-sm text-slate-500">準備中...</p>;
   }
 
-  const oppCount = pub.counts[(meSeat + 1) % 2] ?? 0;
+  const N = pub.seats.length;
   const myTurn = pub.turn === meSeat && !finished;
+  // Each seat other than mine. We draw from the previous seat that still has
+  // cards (server enforces this); we mark that seat as the draw target.
+  const otherSeats = pub.seats
+    .map((uid, idx) => ({ uid, idx }))
+    .filter((p) => p.idx !== meSeat);
+  // Compute the draw-target seat (closest non-empty seat counter-clockwise).
+  let drawSeat = (meSeat - 1 + N) % N;
+  for (let step = 0; step < N - 1 && (pub.counts[drawSeat] ?? 0) === 0; step++) {
+    drawSeat = (drawSeat - 1 + N) % N;
+  }
+  const playerLookup = new Map(players.map((p) => [p.user_id, p]));
+  const turnUserId = pub.seats[pub.turn] ?? null;
+  const turnUsername = turnUserId
+    ? playerLookup.get(turnUserId)?.username ?? "？"
+    : "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン ババ抜き</h2>
-        <span className="text-sm text-slate-500">
-          {me.username} vs {opp?.username ?? "—"}
+        <h2 className="text-xl font-semibold">オンライン ババ抜き ({N}人)</h2>
+        <span className="text-sm text-slate-500">あなた: {me.username}</span>
+        <span className="text-sm">
+          {finished ? "" : myTurn ? "あなたの手番" : `${turnUsername} の手番`}
         </span>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>相手の手札 ({oppCount} 枚)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: oppCount }).map((_, i) => (
-              <PlayingCard
-                key={i}
-                variant="back"
-                size="sm"
-                disabled={!myTurn || busy}
-                onClick={() => pickIndex(i)}
-              />
-            ))}
-            {oppCount === 0 && (
-              <p className="text-sm text-slate-400">相手はあがりました</p>
-            )}
-          </div>
-          {myTurn && oppCount > 0 && (
-            <p className="text-xs text-slate-500 mt-2">
-              相手の手札から 1 枚クリックしてください
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 md:grid-cols-2">
+        {otherSeats.map(({ uid, idx }) => {
+          const info = playerLookup.get(uid);
+          const count = pub.counts[idx] ?? 0;
+          const drawable = myTurn && idx === drawSeat && count > 0 && !busy;
+          return (
+            <Card key={uid}>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {info?.username ?? "—"} ({count} 枚)
+                  {idx === drawSeat && count > 0 && myTurn && (
+                    <span className="ml-2 text-xs text-emerald-600">
+                      ← この人から引きます
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: count }).map((_, i) => (
+                    <PlayingCard
+                      key={i}
+                      variant="back"
+                      size="sm"
+                      disabled={!drawable}
+                      onClick={drawable ? () => pickIndex(i) : undefined}
+                    />
+                  ))}
+                  {count === 0 && (
+                    <p className="text-sm text-slate-400">あがり済み</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       <Card>
         <CardHeader>

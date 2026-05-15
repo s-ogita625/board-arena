@@ -173,20 +173,43 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
 
   if (!pub) return <p className="text-sm text-slate-500">準備中...</p>;
 
+  const N = pub.seats.length;
   const myTurn = pub.turn === meSeat && !finished;
   const revealedMap = new Map(pub.revealed.map((r) => [r.index, r.card]));
   const takenSet = new Set(pub.taken);
+  const playerLookup = new Map(players.map((p) => [p.user_id, p]));
+  const turnUserId = pub.seats[pub.turn] ?? null;
+  const turnUsername = turnUserId
+    ? playerLookup.get(turnUserId)?.username ?? "？"
+    : "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン 神経衰弱</h2>
-        <span className="text-sm text-slate-500">
-          {me.username} ({pub.scores[meSeat] ?? 0}) vs {opp?.username ?? "—"} ({pub.scores[(meSeat + 1) % 2] ?? 0})
-        </span>
+        <h2 className="text-xl font-semibold">オンライン 神経衰弱 ({N}人)</h2>
         <span className="text-sm">
-          {finished ? "" : myTurn ? "あなたの手番" : "相手の手番"}
+          {finished ? "" : myTurn ? "あなたの手番" : `${turnUsername} の手番`}
         </span>
+      </div>
+      <div className="flex flex-wrap gap-2 text-sm">
+        {pub.seats.map((uid, idx) => {
+          const info = playerLookup.get(uid);
+          const isMe = idx === meSeat;
+          const isTurn = pub.turn === idx;
+          return (
+            <span
+              key={uid}
+              className={`px-2 py-1 rounded border ${
+                isTurn
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                  : "border-slate-300"
+              }`}
+            >
+              {info?.username ?? "—"}
+              {isMe && "（あなた）"}: {pub.scores[idx] ?? 0}
+            </span>
+          );
+        })}
       </div>
 
       <Card>

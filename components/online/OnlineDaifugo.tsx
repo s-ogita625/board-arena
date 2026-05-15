@@ -217,32 +217,56 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
 
   if (!pub) return <p className="text-sm text-slate-500">準備中...</p>;
 
-  const oppCount = pub.counts[(meSeat + 1) % 2] ?? 0;
+  const N = pub.seats.length;
+  const playerLookup = new Map(players.map((p) => [p.user_id, p]));
+  const otherSeats = pub.seats
+    .map((uid, idx) => ({ uid, idx }))
+    .filter((p) => p.idx !== meSeat);
+  const turnUserId = pub.seats[pub.turn] ?? null;
+  const turnUsername = turnUserId
+    ? playerLookup.get(turnUserId)?.username ?? "？"
+    : "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン 大富豪</h2>
-        <span className="text-sm text-slate-500">
-          {me.username} vs {opp?.username ?? "—"}
-        </span>
+        <h2 className="text-xl font-semibold">オンライン 大富豪 ({N}人)</h2>
+        <span className="text-sm text-slate-500">あなた: {me.username}</span>
         <span className="text-sm">
-          {finished ? "" : isMyTurn ? "あなたの手番" : "相手の手番"}
+          {finished ? "" : isMyTurn ? "あなたの手番" : `${turnUsername} の手番`}
         </span>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>相手 ({oppCount} 枚)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-1">
-            {Array.from({ length: oppCount }).map((_, i) => (
-              <PlayingCard key={i} variant="back" size="sm" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div
+        className={`grid gap-3 ${
+          otherSeats.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"
+        }`}
+      >
+        {otherSeats.map(({ uid, idx }) => {
+          const info = playerLookup.get(uid);
+          const count = pub.counts[idx] ?? 0;
+          const isTheirTurn = pub.turn === idx;
+          return (
+            <Card key={uid} className={isTheirTurn ? "ring-2 ring-emerald-500" : ""}>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {info?.username ?? "—"} ({count} 枚)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-0.5">
+                  {Array.from({ length: count }).map((_, i) => (
+                    <PlayingCard key={i} variant="back" size="sm" />
+                  ))}
+                  {count === 0 && (
+                    <p className="text-sm text-slate-400">あがり済み</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       <Card>
         <CardHeader>

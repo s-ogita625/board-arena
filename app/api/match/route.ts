@@ -4,14 +4,19 @@ import { isGameId } from "@/lib/utils";
 
 const TOLERANCE_STEPS = [50, 100, 200, 400, 800, 1600, 9999];
 
+const SUPPORTS_MULTI = new Set(["babanuki", "daifugo", "shinkei"]);
+
 /**
  * POST /api/match
- * body: { game: GameId }
+ * body: { game: GameId, players?: 2|3|4 }
+ *   players defaults to 2. Only the card games support > 2.
+ *
  * Behavior:
- *  - Look for opponent in match_queue within tolerance (based on waiting time).
- *  - If found: create room + room_players, remove both from queue.
- *  - Else: insert self into queue.
- *  Returns: { roomId?: string, waiting?: true }
+ *  - If I'm already in an active room for this game, return its id.
+ *  - Else look for waiters in the same (game, desired_players) pool within
+ *    rating tolerance. When we have desired_players - 1 partners (so the
+ *    final size matches), create the room with all of us and clear queue.
+ *  - Else upsert myself into the queue at this size.
  */
 export async function POST(req: Request) {
   const supabase = createSupabaseServer();
@@ -23,22 +28,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
   const game = body.game;
+  let desiredPlayers = Number.isInteger(body.players) ? body.players : 2;
+  if (!SUPPORTS_MULTI.has(game)) desiredPlayers = 2;
+  if (desiredPlayers < 2 || desiredPlayers > 4) {
+    return NextResponse.json({ error: "players must be 2-4" }, { status: 400 });
+  }
 
   const admin = createSupabaseAdmin();
 
   // If I'm already in an active room for this game, hand back that room.
-  // This is how the *second* player (who was sitting in the queue) learns
-  // about the room created by the first player on their next poll.
   const { data: activeRooms } = await admin
     .from("room_players")
-    .select("room_id, rooms!inner(id, game, status)")
+    .select("room_id, rooms!inner(id, game, status, visibility)")
     .eq("user_id", user.id)
     .eq("rooms.game", game)
+    .eq("rooms.visibility", "public")
     .in("rooms.status", ["playing", "waiting"]);
   const activeRoom = (activeRooms ?? []).find((r) => r.room_id);
   if (activeRoom) {
-    // Clean up any leftover queue entry just in case.
-    await admin.from("match_queue").delete().eq("user_id", user.id).eq("game", game);
+    await admin
+      .from("match_queue")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("game", game);
     return NextResponse.json({ roomId: activeRoom.room_id });
   }
 
@@ -51,87 +63,109 @@ export async function POST(req: Request) {
     .single();
   const myRating = myStat?.rating ?? 1000;
 
-  // already in queue? Check time to widen tolerance.
+  // existing queue entry (we keep at most one per game per user; switch size
+  // means we overwrite)
   const { data: existing } = await admin
     .from("match_queue")
-    .select("user_id, joined_at")
+    .select("user_id, joined_at, desired_players")
     .eq("user_id", user.id)
     .eq("game", game)
     .maybeSingle();
 
-  const elapsedSec = existing
-    ? (Date.now() - new Date(existing.joined_at).getTime()) / 1000
-    : 0;
+  const elapsedSec =
+    existing && existing.desired_players === desiredPlayers
+      ? (Date.now() - new Date(existing.joined_at).getTime()) / 1000
+      : 0;
   const stepIdx = Math.min(TOLERANCE_STEPS.length - 1, Math.floor(elapsedSec / 10));
   const tol = TOLERANCE_STEPS[stepIdx];
 
-  // Look for opponent
+  const partnersNeeded = desiredPlayers - 1;
   const { data: candidates } = await admin
     .from("match_queue")
     .select("user_id, rating, joined_at")
     .eq("game", game)
+    .eq("desired_players", desiredPlayers)
     .neq("user_id", user.id)
     .gte("rating", myRating - tol)
     .lte("rating", myRating + tol)
     .order("joined_at", { ascending: true })
-    .limit(1);
+    .limit(partnersNeeded);
 
-  if (candidates && candidates.length > 0) {
-    const opp = candidates[0];
-    // Create room
+  if (candidates && candidates.length >= partnersNeeded) {
+    // Create the room with all participants.
     const { data: room, error: roomErr } = await admin
       .from("rooms")
       .insert({
         game,
         status: "playing",
-        max_players: 2,
+        max_players: desiredPlayers,
+        desired_players: desiredPlayers,
+        visibility: "public",
+        rated: true,
         state: { kind: game, history: [] },
-        // public_state is intentionally left null here. Writing a stub like
-        // { kind: game } caused /api/cards/init to early-return on its
-        // idempotency check (which only compared `kind`), so deck/hands were
-        // never generated for card games. Init is the only owner of public_state.
       })
       .select("id")
       .single();
     if (roomErr || !room) {
-      return NextResponse.json({ error: roomErr?.message ?? "room create failed" }, { status: 500 });
+      return NextResponse.json(
+        { error: roomErr?.message ?? "room create failed" },
+        { status: 500 },
+      );
     }
-    await admin.from("room_players").insert([
-      { room_id: room.id, user_id: user.id,    seat: 0, rating_before: myRating },
-      { room_id: room.id, user_id: opp.user_id, seat: 1, rating_before: opp.rating },
-    ]);
-    // remove both from queue
+    // Seat order: I take 0, partners take 1..N-1 in queue join order.
+    const everyone = [
+      { user_id: user.id, rating: myRating },
+      ...candidates.map((c) => ({ user_id: c.user_id, rating: c.rating })),
+    ];
+    await admin.from("room_players").insert(
+      everyone.map((p, i) => ({
+        room_id: room.id,
+        user_id: p.user_id,
+        seat: i,
+        rating_before: p.rating,
+      })),
+    );
     await admin
       .from("match_queue")
       .delete()
-      .in("user_id", [user.id, opp.user_id])
+      .in(
+        "user_id",
+        everyone.map((p) => p.user_id),
+      )
       .eq("game", game);
 
-    // Confirm both room_players rows are visible (i.e. committed) before we
-    // hand the roomId back to clients. Otherwise the 2nd player can hit the
-    // room page before their RLS-visible membership row exists.
+    // Confirm room_players visibility before handing back the id.
     for (let attempt = 0; attempt < 5; attempt++) {
       const { count } = await admin
         .from("room_players")
         .select("user_id", { count: "exact", head: true })
         .eq("room_id", room.id);
-      if ((count ?? 0) >= 2) break;
+      if ((count ?? 0) >= desiredPlayers) break;
       await new Promise((r) => setTimeout(r, 100));
     }
 
     return NextResponse.json({ roomId: room.id });
   }
 
-  // Not matched: ensure in queue
-  if (!existing) {
-    await admin.from("match_queue").upsert({
+  // Not matched: (re)insert into queue at current size. user_id is PK so
+  // switching game / size simply overwrites the prior entry.
+  await admin.from("match_queue").upsert(
+    {
       user_id: user.id,
       game,
       rating: myRating,
+      desired_players: desiredPlayers,
       joined_at: new Date().toISOString(),
-    });
-  }
-  return NextResponse.json({ waiting: true, tolerance: tol, elapsedSec });
+    },
+    { onConflict: "user_id" },
+  );
+  return NextResponse.json({
+    waiting: true,
+    tolerance: tol,
+    elapsedSec,
+    desiredPlayers,
+    needed: partnersNeeded - (candidates?.length ?? 0),
+  });
 }
 
 export async function DELETE(req: Request) {

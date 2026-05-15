@@ -90,8 +90,11 @@ export async function POST(req: Request) {
     const isOver = remaining === 0;
     let winnerId: string | null | undefined = undefined;
     if (isOver) {
-      if (scores[0] === scores[1]) winnerId = null;
-      else winnerId = pub.seats[scores[0] > scores[1] ? 0 : 1];
+      const max = Math.max(...scores);
+      const top = scores
+        .map((s, i) => (s === max ? i : -1))
+        .filter((i) => i >= 0);
+      winnerId = top.length === 1 ? pub.seats[top[0]] : null; // draw if tied
     }
     const nextTurn = matched ? meSeat : (meSeat + 1) % pub.seats.length;
     const newPub: ShinkeiPublic = {

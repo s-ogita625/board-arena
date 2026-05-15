@@ -45,6 +45,7 @@ export async function POST(req: Request) {
 
   const hands = priv.hands.map((h) => h.slice());
   const myHand = hands[meSeat];
+  const N = pub.seats.length;
 
   const finishSeats = pub.finished.slice();
   let nextTurn = pub.turn;
@@ -53,6 +54,16 @@ export async function POST(req: Request) {
   let nextPasses = pub.passes;
   let isOver = false;
   let winnerId: string | null | undefined = undefined;
+
+  // Move the turn clockwise, skipping seats whose hand is already empty.
+  function advance(from: number): number {
+    let t = (from + 1) % N;
+    for (let step = 0; step < N; step++) {
+      if (hands[t].length > 0) return t;
+      t = (t + 1) % N;
+    }
+    return from; // everyone empty (game over)
+  }
 
   if (body.action === "play") {
     if (!Array.isArray(body.cardIds) || body.cardIds.length === 0) {
@@ -65,7 +76,6 @@ export async function POST(req: Request) {
       if (!c) return NextResponse.json({ error: "card not in hand" }, { status: 400 });
       chosen.push(c);
     }
-    // validate against legal plays
     const plays = legalPlays(myHand, pub.current);
     const chosenIds = chosen.map((c) => c.id).sort().join(",");
     const legal = plays.some(
@@ -82,24 +92,24 @@ export async function POST(req: Request) {
     if (hands[meSeat].length === 0 && !finishSeats.includes(user.id)) {
       finishSeats.push(user.id);
     }
-    // 2P over check
     if (hands.filter((h) => h.length > 0).length <= 1) {
       isOver = true;
       winnerId = finishSeats[0] ?? null;
     }
-    // advance turn
-    nextTurn = (meSeat + 1) % 2;
-    if (!isOver && hands[nextTurn].length === 0) nextTurn = meSeat;
+    if (!isOver) nextTurn = advance(meSeat);
   } else if (body.action === "pass") {
     nextPasses = pub.passes + 1;
-    nextTurn = (meSeat + 1) % 2;
-    if (!isOver && hands[nextTurn].length === 0) nextTurn = meSeat;
     const alive = hands.filter((h) => h.length > 0).length;
+    nextTurn = advance(meSeat);
+    // When everyone but the last player to lay cards has passed, the field
+    // is cleared and that player leads again.
     if (nextPasses >= alive - 1 && nextLastSeat != null) {
       nextCurrent = null;
       nextPasses = 0;
       nextTurn = nextLastSeat;
-      if (hands[nextTurn].length === 0) nextTurn = (nextTurn + 1) % 2;
+      if (hands[nextTurn].length === 0) {
+        nextTurn = advance(nextLastSeat);
+      }
       nextLastSeat = null;
     }
   } else {

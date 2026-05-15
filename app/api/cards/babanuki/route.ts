@@ -62,8 +62,12 @@ export async function POST(req: Request) {
   if (meSeat < 0) return NextResponse.json({ error: "not a participant" }, { status: 403 });
   if (meSeat !== pub.turn) return NextResponse.json({ error: "not your turn" }, { status: 400 });
 
-  const oppSeat = (meSeat - 1 + pub.seats.length) % pub.seats.length;
-  // (2-player: opponent is just the other seat)
+  const N = pub.seats.length;
+  // Draw from the previous seat that still has cards (counter-clockwise).
+  let oppSeat = (meSeat - 1 + N) % N;
+  for (let step = 0; step < N - 1 && priv.hands[oppSeat].length === 0; step++) {
+    oppSeat = (oppSeat - 1 + N) % N;
+  }
   const oppHand = priv.hands[oppSeat];
   if (!oppHand || oppHand.length === 0) {
     return NextResponse.json({ error: "opponent empty" }, { status: 400 });
@@ -88,25 +92,28 @@ export async function POST(req: Request) {
   if (newMe.length === 0 && !finishedSeats.includes(meUserId)) finishedSeats.push(meUserId);
   if (newOpp.length === 0 && !finishedSeats.includes(oppUserId)) finishedSeats.push(oppUserId);
 
-  // In 2-player babanuki the first to empty wins; the remaining player loses.
+  // Game ends when only one player still holds cards (they are the joker
+  // holder = loser). In multi-player babanuki we treat the player who
+  // emptied first as the overall winner (other finishers tie behind).
   let winnerId: string | null | undefined = undefined;
   const stillHolding = newHands
     .map((h, i) => (h.length > 0 ? pub.seats[i] : null))
     .filter((v): v is string => !!v);
   const isOver = stillHolding.length <= 1;
   if (isOver) {
-    // winner = the one who finished first (joker holder loses)
     winnerId = finishedSeats[0] ?? null;
   }
 
-  // next turn: advance to next alive (2 players → just the other if alive)
+  // Next turn: advance clockwise (meSeat + 1) and skip players who already
+  // finished. If everyone but one is finished, isOver is already true.
   let nextTurn = pub.turn;
   if (!isOver) {
-    nextTurn = oppSeat; // opponent's turn
-    if (newHands[nextTurn].length === 0) {
-      // they finished, give back turn? In 2P this means game over (handled above)
-      nextTurn = meSeat;
+    let t = (meSeat + 1) % N;
+    for (let step = 0; step < N; step++) {
+      if (newHands[t].length > 0) break;
+      t = (t + 1) % N;
     }
+    nextTurn = t;
   }
 
   const newPub: BabanukiPublic = {

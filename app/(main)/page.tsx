@@ -21,6 +21,15 @@ export default function HomePage() {
         </p>
       </section>
 
+      <section className="flex justify-center">
+        <Link
+          href="/friend"
+          className="inline-flex items-center gap-2 rounded-md border border-brand text-brand h-10 px-4 text-sm font-medium hover:bg-brand hover:text-brand-fg transition"
+        >
+          🤝 フレンド対戦（パスコードで部屋に入る／建てる）
+        </Link>
+      </section>
+
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {GAMES.map((g) => {
           const onlineReady = ONLINE_READY.has(g.id);
