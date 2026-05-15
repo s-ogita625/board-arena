@@ -26,6 +26,22 @@ export async function POST(req: Request) {
 
   const admin = createSupabaseAdmin();
 
+  // If I'm already in an active room for this game, hand back that room.
+  // This is how the *second* player (who was sitting in the queue) learns
+  // about the room created by the first player on their next poll.
+  const { data: activeRooms } = await admin
+    .from("room_players")
+    .select("room_id, rooms!inner(id, game, status)")
+    .eq("user_id", user.id)
+    .eq("rooms.game", game)
+    .in("rooms.status", ["playing", "waiting"]);
+  const activeRoom = (activeRooms ?? []).find((r) => r.room_id);
+  if (activeRoom) {
+    // Clean up any leftover queue entry just in case.
+    await admin.from("match_queue").delete().eq("user_id", user.id).eq("game", game);
+    return NextResponse.json({ roomId: activeRoom.room_id });
+  }
+
   // get my rating
   const { data: myStat } = await admin
     .from("game_stats")
@@ -87,6 +103,18 @@ export async function POST(req: Request) {
       .delete()
       .in("user_id", [user.id, opp.user_id])
       .eq("game", game);
+
+    // Confirm both room_players rows are visible (i.e. committed) before we
+    // hand the roomId back to clients. Otherwise the 2nd player can hit the
+    // room page before their RLS-visible membership row exists.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { count } = await admin
+        .from("room_players")
+        .select("user_id", { count: "exact", head: true })
+        .eq("room_id", room.id);
+      if ((count ?? 0) >= 2) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     return NextResponse.json({ roomId: room.id });
   }

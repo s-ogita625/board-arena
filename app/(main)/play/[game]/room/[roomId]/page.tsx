@@ -1,11 +1,36 @@
 import { notFound, redirect } from "next/navigation";
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import { isGameId } from "@/lib/utils";
 import { OnlineChess } from "@/components/online/OnlineChess";
 import { OnlineShogi } from "@/components/online/OnlineShogi";
 import { OnlineBabanuki } from "@/components/online/OnlineBabanuki";
 import { OnlineShinkei } from "@/components/online/OnlineShinkei";
 import { OnlineDaifugo } from "@/components/online/OnlineDaifugo";
+
+// Always render dynamically so we don't serve a stale 404 from RSC cache to the
+// 2nd player whose room_players row was just inserted milliseconds ago.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+async function fetchRoomWithRetry(
+  supabase: ReturnType<typeof createSupabaseServer>,
+  roomId: string,
+) {
+  // RLS on `rooms` requires the requester to be in `room_players`. The 2nd
+  // player can land here a few hundred ms before their `room_players` row is
+  // visible to their authenticated session, which would otherwise return null.
+  // Retry briefly to ride out the replication / snapshot lag.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data } = await supabase
+      .from("rooms")
+      .select("id, game, status, state")
+      .eq("id", roomId)
+      .maybeSingle();
+    if (data) return data;
+    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+  }
+  return null;
+}
 
 export default async function RoomPage({
   params,
@@ -17,11 +42,28 @@ export default async function RoomPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: room } = await supabase
-    .from("rooms")
-    .select("id, game, status, state")
-    .eq("id", params.roomId)
-    .single();
+  let room = await fetchRoomWithRetry(supabase, params.roomId);
+
+  // Final fallback: verify with service-role that this user actually belongs
+  // to the room, then read the room without RLS. This avoids 404s caused by
+  // RLS visibility lag right after match creation.
+  if (!room) {
+    const admin = createSupabaseAdmin();
+    const { data: membership } = await admin
+      .from("room_players")
+      .select("room_id")
+      .eq("room_id", params.roomId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membership) {
+      const { data: adminRoom } = await admin
+        .from("rooms")
+        .select("id, game, status, state")
+        .eq("id", params.roomId)
+        .maybeSingle();
+      if (adminRoom) room = adminRoom;
+    }
+  }
   if (!room) notFound();
 
   const { data: players } = await supabase

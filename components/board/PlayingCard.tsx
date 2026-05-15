@@ -31,7 +31,10 @@ export function PlayingCard({
   size = "md",
   className,
 }: PlayingCardProps) {
-  const sizeCls = size === "sm" ? "w-10 h-14 text-[10px]" : "w-12 h-16 text-xs sm:w-14 sm:h-20 sm:text-sm";
+  const sizeCls =
+    size === "sm"
+      ? "w-7 h-10 text-[9px] sm:w-10 sm:h-14 sm:text-[10px]"
+      : "w-10 h-14 text-[10px] sm:w-14 sm:h-20 sm:text-sm";
   const base =
     "relative rounded border shadow-sm flex items-center justify-center select-none transition";
   const isJoker = card?.suit === "JOKER";
@@ -89,12 +92,12 @@ export function PlayingCard({
       )}
     >
       {isJoker ? (
-        <span className="text-xl sm:text-2xl">🃏</span>
+        <span className="text-base sm:text-2xl">🃏</span>
       ) : (
         <>
           <span
             className={cn(
-              "absolute top-0.5 left-1 font-bold leading-none",
+              "absolute top-0.5 left-0.5 sm:left-1 font-bold leading-none",
               red ? "text-red-600" : "text-slate-900",
             )}
           >
@@ -102,7 +105,7 @@ export function PlayingCard({
           </span>
           <span
             className={cn(
-              "text-xl sm:text-2xl leading-none",
+              "text-base sm:text-2xl leading-none",
               red ? "text-red-600" : "text-slate-900",
             )}
           >
@@ -110,7 +113,7 @@ export function PlayingCard({
           </span>
           <span
             className={cn(
-              "absolute bottom-0.5 right-1 leading-none rotate-180",
+              "absolute bottom-0.5 right-0.5 sm:right-1 leading-none rotate-180",
               red ? "text-red-600" : "text-slate-900",
             )}
           >

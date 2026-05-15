@@ -45,9 +45,15 @@ export default function MatchingPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ game }),
+          cache: "no-store",
         });
         const json = await res.json();
         if (json.roomId) {
+          // Refresh first so Next.js drops any cached 404 RSC for the
+          // room path, then navigate. A small delay also helps the
+          // 2nd player's session see their newly inserted room_players row.
+          router.refresh();
+          await new Promise((r) => setTimeout(r, 250));
           router.push(`/play/${game}/room/${json.roomId}`);
           return;
         }
@@ -55,8 +61,9 @@ export default function MatchingPage() {
           setStatus(`エラー: ${json.error}`);
           return;
         }
-        // wait 3s before polling
-        await new Promise<void>((r) => { timer = setTimeout(r, 3000); });
+        // Poll every 2s. The handler returns the roomId both for the
+        // matcher AND for the partner already paired into a room.
+        await new Promise<void>((r) => { timer = setTimeout(r, 2000); });
       }
     }
     poll();

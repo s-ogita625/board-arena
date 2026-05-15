@@ -79,7 +79,7 @@ export function ChessBoard({
                   key={sq}
                   onClick={() => onSquareClick(sq)}
                   className={cn(
-                    "w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center text-3xl sm:text-4xl",
+                    "w-10 h-10 sm:w-14 sm:h-14 flex items-center justify-center text-2xl sm:text-4xl",
                     isLight ? "bg-board-light" : "bg-board-dark",
                     isSel && "ring-2 ring-inset ring-yellow-400",
                     isTarget && "after:content-[''] relative",

@@ -148,8 +148,8 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
       </div>
 
       <Card>
-        <CardContent className="pt-4">
-          <div className="grid grid-cols-13 gap-1 max-w-3xl">
+        <CardContent className="pt-4 overflow-x-auto">
+          <div className="grid grid-cols-13 gap-0.5 sm:gap-1 max-w-3xl min-w-[360px]">
             {Array.from({ length: pub.positions }).map((_, i) => {
               const rev = revealedMap.get(i);
               const taken = takenSet.has(i);
