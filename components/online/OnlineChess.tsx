@@ -34,7 +34,10 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [game] = useState(() => new Chess());
-  const [, setTick] = useState(0);
+  // tick is used as a version key for <ChessBoard> so that mutations on the
+  // same `game` instance (which doesn't change identity) still trigger
+  // re-render of the squares.
+  const [tick, setTick] = useState(0);
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -191,6 +194,7 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
           flipped={humanColor === "b"}
           onMove={handleMove}
           disabled={finished}
+          versionKey={tick}
         />
         <Card className="flex-1">
           <CardHeader><CardTitle>状況</CardTitle></CardHeader>
