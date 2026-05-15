@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-no-comment-textnodes */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -137,104 +138,136 @@ export default function FriendLobbyPage() {
   }
 
   if (!room) {
-    return <p className="text-sm text-slate-500 mt-12 text-center">読み込み中...</p>;
+    return (
+      <p className="text-sm text-arena-textDim mt-12 text-center font-mono">
+        // LOADING ROOM...
+      </p>
+    );
   }
 
   return (
-    <div className="max-w-xl mx-auto mt-12 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>フレンド対戦ロビー</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <p className="text-sm text-slate-500">パスコード（相手にこれを共有）</p>
-            <p className="font-mono text-3xl tracking-widest select-all">
-              {room.passcode ?? "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">参加者</p>
-            <ul className="list-disc pl-5">
-              {members.map((m) => (
-                <li key={m.user_id} className="text-sm">
-                  {m.username}
-                  {m.user_id === room.host_id && " (ホスト)"}
-                  {m.user_id === myUserId && " (あなた)"}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="max-w-xl mx-auto mt-8 space-y-5">
+      {/* Header strip */}
+      <section className="border-l-4 border-arena-primary pl-5 py-3">
+        <p className="font-display uppercase tracking-[0.3em] text-arena-primary text-xs">
+          // PRIVATE LOBBY
+        </p>
+        <h1 className="font-display uppercase text-2xl tracking-wider mt-1">
+          ROOM #{room.passcode ?? "----"}
+        </h1>
+      </section>
 
+      {/* Passcode + members */}
+      <div className="relative corner-brackets bg-arena-surface border border-arena-border p-6 scanline">
+        <span className="cb1" /><span className="cb2" />
+        <p className="text-arena-textMute font-mono text-[10px] uppercase tracking-widest">
+          // PASSCODE — share with your friends
+        </p>
+        <p className="font-mono text-4xl tracking-[0.4em] text-arena-primary select-all mt-2">
+          {room.passcode ?? "—"}
+        </p>
+
+        <div className="mt-6">
+          <p className="text-arena-textMute font-mono text-[10px] uppercase tracking-widest mb-2">
+            // PARTICIPANTS ({members.length})
+          </p>
+          <ul className="space-y-1">
+            {members.map((m, i) => (
+              <li
+                key={m.user_id}
+                className="flex items-center gap-3 px-3 py-2 bg-arena-bg border-l-2 border-arena-primary/60"
+              >
+                <span className="font-mono text-arena-textMute text-xs w-6">
+                  0{i + 1}
+                </span>
+                <span className="font-display uppercase tracking-wider text-sm">
+                  {m.username}
+                </span>
+                {m.user_id === room.host_id && (
+                  <span className="font-mono text-[10px] px-1.5 py-0.5 bg-arena-primary/20 border border-arena-primary/40 text-arena-primary uppercase">
+                    HOST
+                  </span>
+                )}
+                {m.user_id === myUserId && (
+                  <span className="font-mono text-[10px] text-arena-textDim ml-auto">
+                    (YOU)
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Host controls */}
       {isHost ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>ゲームを選んで開始</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-1">種目</p>
+        <div className="relative bg-arena-surface border border-arena-border p-6 space-y-5">
+          <p className="font-display uppercase tracking-[0.22em] text-arena-primary text-xs">
+            // SELECT GAME
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {GAMES.map((g) => (
+              <Button
+                key={g.id}
+                variant={selectedGame === g.id ? "primary" : "secondary"}
+                onClick={() => setSelectedGame(g.id)}
+              >
+                {g.label}
+              </Button>
+            ))}
+          </div>
+
+          {selectedGameDef && selectedGameDef.maxPlayers > 2 && (
+            <>
+              <p className="font-display uppercase tracking-[0.22em] text-arena-primary text-xs">
+                // PLAYERS
+              </p>
               <div className="grid grid-cols-3 gap-2">
-                {GAMES.map((g) => (
+                {[2, 3, 4].map((n) => (
                   <Button
-                    key={g.id}
-                    variant={selectedGame === g.id ? "primary" : "secondary"}
-                    onClick={() => setSelectedGame(g.id)}
+                    key={n}
+                    variant={selectedPlayers === n ? "primary" : "secondary"}
+                    onClick={() => setSelectedPlayers(n)}
+                    disabled={
+                      n < selectedGameDef.minPlayers ||
+                      n > selectedGameDef.maxPlayers
+                    }
                   >
-                    {g.label}
+                    {n} 人
                   </Button>
                 ))}
               </div>
-            </div>
+            </>
+          )}
 
-            {selectedGameDef && selectedGameDef.maxPlayers > 2 && (
-              <div>
-                <p className="text-sm font-medium mb-1">人数</p>
-                <div className="flex gap-2">
-                  {[2, 3, 4].map((n) => (
-                    <Button
-                      key={n}
-                      variant={selectedPlayers === n ? "primary" : "secondary"}
-                      onClick={() => setSelectedPlayers(n)}
-                      disabled={
-                        n < selectedGameDef.minPlayers ||
-                        n > selectedGameDef.maxPlayers
-                      }
-                    >
-                      {n} 人
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <p className="text-xs font-mono text-arena-textDim">
+            // {members.length} / {selectedPlayers} READY
+          </p>
 
-            <p className="text-xs text-slate-500">
-              現在 {members.length} 人参加中 / 必要 {selectedPlayers} 人
+          <Button
+            onClick={startGame}
+            disabled={busy || members.length < selectedPlayers}
+            size="lg"
+            className="w-full"
+          >
+            START {gameLabel(selectedGame)}
+          </Button>
+          {error && (
+            <p className="text-sm text-arena-accent font-mono">
+              // ERROR: {error}
             </p>
-
-            <Button
-              onClick={startGame}
-              disabled={busy || members.length < selectedPlayers}
-            >
-              {gameLabel(selectedGame)} を開始
-            </Button>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </CardContent>
-        </Card>
+          )}
+        </div>
       ) : (
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-sm text-slate-500">
-              ホストがゲームを選択するのを待っています...
-            </p>
-          </CardContent>
-        </Card>
+        <div className="bg-arena-surface border border-arena-border p-6 text-center">
+          <p className="font-mono text-arena-textDim text-sm">
+            // WAITING FOR HOST TO PICK A GAME...
+          </p>
+        </div>
       )}
 
-      <Button variant="secondary" onClick={() => router.push("/")}>
-        ホームに戻る
+      <Button variant="ghost" onClick={() => router.push("/")}>
+        ← HOME
       </Button>
     </div>
   );

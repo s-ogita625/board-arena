@@ -1,9 +1,9 @@
+/* eslint-disable react/jsx-no-comment-textnodes */
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function FriendLandingPage() {
   const router = useRouter();
@@ -50,52 +50,62 @@ export default function FriendLandingPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-12 space-y-6">
-      <h1 className="text-2xl font-semibold">フレンド対戦</h1>
-      <p className="text-sm text-slate-500">
-        プライベート部屋を建ててパスコードを共有するか、教えてもらったパスコードで入室します。
-        ここでの対戦結果はレーティングに反映されません（カジュアル扱い）。
-      </p>
+    <div className="max-w-xl mx-auto mt-8 space-y-6">
+      <section className="border-l-4 border-arena-accent pl-5 py-4">
+        <p className="font-display uppercase tracking-[0.32em] text-arena-accent text-xs">
+          // FRIEND MATCH
+        </p>
+        <h1 className="font-display uppercase text-3xl sm:text-4xl tracking-wider mt-2">
+          PRIVATE LOBBY
+        </h1>
+        <p className="text-arena-textDim text-sm mt-1">
+          パスコードを共有して、知り合いだけの部屋で対戦。レートは変動しません（カジュアル）。
+        </p>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>部屋を建てる</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-slate-500">
-            建てるとパスコードが発行されます。それを相手に共有してください。
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* CREATE */}
+        <div className="relative corner-brackets bg-arena-surface border border-arena-border p-6">
+          <span className="cb1" /><span className="cb2" />
+          <p className="font-display uppercase tracking-[0.22em] text-arena-primary text-xs mb-3">
+            // HOST
           </p>
-          <Button onClick={createRoom} disabled={busy}>
-            部屋を作る
+          <h2 className="font-display uppercase text-xl tracking-wider">CREATE ROOM</h2>
+          <p className="text-arena-textDim text-xs mt-2">
+            部屋を建てるとパスコードが発行されます。相手に共有してください。
+          </p>
+          <Button onClick={createRoom} disabled={busy} className="w-full mt-5">
+            CREATE / 部屋を作る
           </Button>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>部屋に入る</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={joinRoom} className="space-y-3">
+        {/* JOIN */}
+        <div className="relative corner-brackets bg-arena-surface border border-arena-border p-6">
+          <span className="cb1" /><span className="cb2" />
+          <p className="font-display uppercase tracking-[0.22em] text-arena-accent text-xs mb-3">
+            // GUEST
+          </p>
+          <h2 className="font-display uppercase text-xl tracking-wider">JOIN ROOM</h2>
+          <form onSubmit={joinRoom} className="space-y-3 mt-3">
             <input
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="パスコード（例: AB3D7K）"
+              placeholder="PASSCODE (e.g. AB3D7K)"
               maxLength={16}
-              className="w-full px-3 py-2 border rounded font-mono uppercase tracking-wider"
+              className="w-full px-4 py-3 bg-arena-bg border border-arena-border focus:border-arena-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-arena-primary font-mono uppercase tracking-[0.3em] text-center text-lg"
               autoCapitalize="characters"
               autoComplete="off"
             />
-            <Button type="submit" disabled={busy || !code.trim()}>
-              入室する
+            <Button type="submit" disabled={busy || !code.trim()} className="w-full">
+              JOIN / 入室
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-arena-accent font-mono">// ERROR: {error}</p>
       )}
     </div>
   );
