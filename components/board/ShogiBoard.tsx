@@ -161,7 +161,10 @@ export function ShogiBoard({ state, humanSide, onMove, disabled }: Props) {
                       <span
                         className={cn(
                           "leading-none",
-                          cell.owner === "G" && "rotate-180",
+                          // The opponent's pieces face the viewer upside-down.
+                          // Previously this was hard-coded to "G", which made
+                          // the Gote player's own pieces appear inverted.
+                          cell.owner !== humanSide && "rotate-180",
                           cell.piece.startsWith("+") && "text-red-700",
                         )}
                       >
