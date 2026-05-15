@@ -3,7 +3,13 @@ import { GAMES } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // オンライン対応済みのゲーム。未対応のものは「近日公開」表示。
-const ONLINE_READY: ReadonlySet<string> = new Set(["chess", "shogi"]);
+const ONLINE_READY: ReadonlySet<string> = new Set([
+  "chess",
+  "shogi",
+  "babanuki",
+  "shinkei",
+  "daifugo",
+]);
 
 export default function HomePage() {
   return (

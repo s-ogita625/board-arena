@@ -118,7 +118,25 @@ types/database.ts                DB 型定義
 
 ```bash
 npm test         # Vitest（Elo 単体テスト）
+npm run e2e      # Playwright E2E（公開ルートのスモークテスト）
+npm run e2e:ui   # Playwright UI モード
 ```
+
+初回実行時のみブラウザインストールが必要です：
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+## オンライン対戦のチート対策
+
+各オンラインカードゲームでは、サーバ（API Route, service_role）のみが真の状態を保持します。
+
+- `boardarena.rooms.state` — 完全な真値（手札含む、サーバのみアクセス）
+- `boardarena.rooms.public_state` — 全員にブロードキャストされる公開情報（手札枚数のみ）
+- `boardarena.room_private_state` — 各プレイヤーの手札（RLS により本人のみ SELECT 可能）
+
+クライアントから不正な手を投げても、API Route で再検証されるため反映されません。
 
 ## ライセンス
 

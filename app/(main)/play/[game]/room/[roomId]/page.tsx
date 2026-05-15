@@ -3,6 +3,9 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { isGameId } from "@/lib/utils";
 import { OnlineChess } from "@/components/online/OnlineChess";
 import { OnlineShogi } from "@/components/online/OnlineShogi";
+import { OnlineBabanuki } from "@/components/online/OnlineBabanuki";
+import { OnlineShinkei } from "@/components/online/OnlineShinkei";
+import { OnlineDaifugo } from "@/components/online/OnlineDaifugo";
 
 export default async function RoomPage({
   params,
@@ -43,29 +46,29 @@ export default async function RoomPage({
     );
   }
 
-  if (params.game === "chess") {
-    return (
-      <OnlineChess
-        roomId={room.id}
-        meSeat={me.seat}
-        players={playerList}
-        finished={room.status === "finished"}
-      />
-    );
+  const sharedProps = {
+    roomId: room.id,
+    meSeat: me.seat,
+    players: playerList,
+    finished: room.status === "finished",
+  };
+
+  switch (params.game) {
+    case "chess":
+      return <OnlineChess {...sharedProps} />;
+    case "shogi":
+      return <OnlineShogi {...sharedProps} />;
+    case "babanuki":
+      return <OnlineBabanuki {...sharedProps} />;
+    case "shinkei":
+      return <OnlineShinkei {...sharedProps} />;
+    case "daifugo":
+      return <OnlineDaifugo {...sharedProps} />;
+    default:
+      return (
+        <div className="max-w-md mx-auto mt-16">
+          <p>このゲーム種別のオンライン対戦は現在開発中です。ソロでお楽しみください。</p>
+        </div>
+      );
   }
-  if (params.game === "shogi") {
-    return (
-      <OnlineShogi
-        roomId={room.id}
-        meSeat={me.seat}
-        players={playerList}
-        finished={room.status === "finished"}
-      />
-    );
-  }
-  return (
-    <div className="max-w-md mx-auto mt-16">
-      <p>このゲーム種別のオンライン対戦は現在開発中です。ソロでお楽しみください。</p>
-    </div>
-  );
 }

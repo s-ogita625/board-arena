@@ -8,7 +8,13 @@ import { gameLabel, isGameId } from "@/lib/utils";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 // オンライン対戦が実装済みのゲーム
-const ONLINE_READY: ReadonlySet<string> = new Set(["chess", "shogi"]);
+const ONLINE_READY: ReadonlySet<string> = new Set([
+  "chess",
+  "shogi",
+  "babanuki",
+  "shinkei",
+  "daifugo",
+]);
 
 export default function MatchingPage() {
   const router = useRouter();
