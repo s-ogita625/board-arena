@@ -1,13 +1,16 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { Database } from "@/types/database";
+import { createClient } from "@supabase/supabase-js";
+
+export const BOARDARENA_SCHEMA = "boardarena";
 
 export function createSupabaseServer() {
   const cookieStore = cookies();
-  return createServerClient<Database>(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      db: { schema: BOARDARENA_SCHEMA as "public" },
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
@@ -31,14 +34,13 @@ export function createSupabaseServer() {
   );
 }
 
-import { createClient } from "@supabase/supabase-js";
-
 export function createSupabaseAdmin() {
-  return createClient<Database>(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: { autoRefreshToken: false, persistSession: false },
+      db: { schema: BOARDARENA_SCHEMA as "public" },
     },
   );
 }

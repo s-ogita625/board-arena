@@ -40,14 +40,14 @@ export function ProfileEditor({ initial }: Props) {
       const ext = file.name.split(".").pop() || "png";
       const path = `${initial.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
-        .from("avatars")
+        .from("boardarena-avatars")
         .upload(path, file, { upsert: true });
       if (upErr) {
         setStatus(`画像アップロード失敗: ${upErr.message}`);
         setLoading(false);
         return;
       }
-      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      const { data: pub } = supabase.storage.from("boardarena-avatars").getPublicUrl(path);
       avatar_url = pub.publicUrl;
     }
 

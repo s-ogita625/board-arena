@@ -24,12 +24,23 @@ export function Header() {
         setMe(null);
         return;
       }
+      // Ensure profile + game_stats exist (idempotent)
       const { data: prof } = await supabase
         .from("profiles")
         .select("id, username, avatar_url")
         .eq("id", user.id)
-        .single();
-      setMe(prof ?? { id: user.id, username: "player", avatar_url: null });
+        .maybeSingle();
+      if (!prof) {
+        await fetch("/api/bootstrap", { method: "POST" });
+        const { data: prof2 } = await supabase
+          .from("profiles")
+          .select("id, username, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+        setMe(prof2 ?? { id: user.id, username: "player", avatar_url: null });
+      } else {
+        setMe(prof);
+      }
     });
   }, []);
 

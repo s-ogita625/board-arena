@@ -81,7 +81,7 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
       .channel(`room:${roomId}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
+        { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
         (payload) => {
           const newRow = payload.new as { state: ShogiRoomState; status: string };
           syncFromRow(newRow.state);
