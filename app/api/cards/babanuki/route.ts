@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
-import type { Card } from "@/lib/games/cards/deck";
+import { shuffle, type Card } from "@/lib/games/cards/deck";
 import type { BabanukiPublic, BabanukiPrivate } from "@/lib/games/cards/online";
 
 /**
@@ -82,9 +82,19 @@ export async function POST(req: Request) {
   const merged = [...priv.hands[meSeat], drawn];
   const { hand: newMe, paired } = discardPairs(merged);
 
+  // Re-shuffle every hand after a draw. Without this, both players can
+  // memorize where the joker sits because the previous victim's cards stay
+  // at the same indices forever (and the same trick lets the drawer dodge
+  // it indefinitely). Shuffling means the joker's position changes between
+  // turns even though the cards themselves are the same.
   const newHands = priv.hands.slice();
-  newHands[meSeat] = newMe;
-  newHands[oppSeat] = newOpp;
+  newHands[meSeat] = shuffle(newMe);
+  newHands[oppSeat] = shuffle(newOpp);
+  for (let i = 0; i < newHands.length; i++) {
+    if (i !== meSeat && i !== oppSeat) {
+      newHands[i] = shuffle(newHands[i]);
+    }
+  }
 
   const finishedSeats = pub.finished.slice();
   const meUserId = pub.seats[meSeat];

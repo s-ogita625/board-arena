@@ -30,13 +30,17 @@ export async function POST() {
 
   const admin = createSupabaseAdmin();
 
-  // Retry passcode generation in the unlikely event of a collision.
+  // We don't yet know which game the host will choose, but the rooms.game
+  // column has a CHECK constraint that only allows real GameIds. Park the
+  // row as "chess" while in waiting status; /api/rooms/start will overwrite
+  // it the moment the host actually picks a game.
+  let lastError: string | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const passcode = makePasscode();
     const { data: room, error } = await admin
       .from("rooms")
       .insert({
-        game: "lobby",
+        game: "chess",
         status: "waiting",
         max_players: 4,
         desired_players: 2,
@@ -49,7 +53,6 @@ export async function POST() {
       .select("id, passcode")
       .single();
     if (!error && room) {
-      // Add the host as seat 0.
       await admin.from("room_players").insert({
         room_id: room.id,
         user_id: user.id,
@@ -58,7 +61,10 @@ export async function POST() {
       });
       return NextResponse.json({ roomId: room.id, passcode: room.passcode });
     }
-    // duplicate passcode would surface here; loop and retry
+    lastError = error?.message ?? null;
   }
-  return NextResponse.json({ error: "could not create room" }, { status: 500 });
+  return NextResponse.json(
+    { error: lastError ?? "could not create room" },
+    { status: 500 },
+  );
 }

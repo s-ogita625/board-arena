@@ -78,6 +78,9 @@ export function drawAndProgress(
   const drawn = newHands[opp].splice(cardIndex, 1)[0];
   newHands[me].push(drawn);
   newHands[me] = discardPairs(newHands[me]);
+  // Reshuffle every hand so card indices change between turns. Without this
+  // both players can memorize joker positions and avoid them indefinitely.
+  for (let i = 0; i < newHands.length; i++) newHands[i] = shuffle(newHands[i]);
   const finished = [...state.finishedOrder];
   if (newHands[me].length === 0 && !finished.includes(me)) finished.push(me);
   if (newHands[opp].length === 0 && !finished.includes(opp)) finished.push(opp);
