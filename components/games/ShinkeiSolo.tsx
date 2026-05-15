@@ -14,7 +14,7 @@ import {
   shinkeiRanks,
   type ShinkeiState,
 } from "@/lib/games/cards/shinkei";
-import { cardLabel } from "@/lib/games/cards/deck";
+import { PlayingCard } from "@/components/board/PlayingCard";
 import { reportSoloResult } from "@/lib/results/report";
 
 const HUMAN = 0;
@@ -146,26 +146,22 @@ export function ShinkeiSolo() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-8 sm:grid-cols-13 gap-1">
+          <div className="flex flex-wrap gap-1">
             {state.board.map((c, i) => {
               const open = state.revealed[i];
               const taken = state.taken[i];
+              if (taken || !c) {
+                return <PlayingCard key={i} variant="empty" size="sm" />;
+              }
               return (
-                <button
+                <PlayingCard
                   key={i}
+                  card={c}
+                  variant={open ? "open" : "back"}
+                  size="sm"
+                  disabled={thinking || state.turn !== HUMAN || open}
                   onClick={() => humanFlip(i)}
-                  disabled={taken || thinking || state.turn !== HUMAN}
-                  className={
-                    "aspect-[2/3] rounded text-xs font-medium border " +
-                    (taken
-                      ? "bg-transparent border-transparent text-transparent"
-                      : open
-                        ? "bg-white text-slate-900"
-                        : "bg-blue-600 text-white hover:bg-blue-700")
-                  }
-                >
-                  {taken ? "" : open ? cardLabel(c!) : "?"}
-                </button>
+                />
               );
             })}
           </div>

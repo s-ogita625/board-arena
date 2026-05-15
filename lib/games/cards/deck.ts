@@ -29,12 +29,19 @@ export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
   return a;
 }
 
+export function rankLabel(c: Card): string {
+  if (c.suit === "JOKER") return "JK";
+  const r = c.rank;
+  return r === 1 ? "A" : r === 11 ? "J" : r === 12 ? "Q" : r === 13 ? "K" : String(r);
+}
+
+export function suitGlyph(c: Card): string {
+  return c.suit === "JOKER" ? "🃏" : c.suit;
+}
+
 export function cardLabel(c: Card): string {
   if (c.suit === "JOKER") return "🃏";
-  const r = c.rank;
-  const label =
-    r === 1 ? "A" : r === 11 ? "J" : r === 12 ? "Q" : r === 13 ? "K" : String(r);
-  return `${c.suit}${label}`;
+  return `${c.suit}${rankLabel(c)}`;
 }
 
 export function isRed(c: Card) {

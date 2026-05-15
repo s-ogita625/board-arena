@@ -14,6 +14,7 @@ import {
   type BabaState,
 } from "@/lib/games/cards/babanuki";
 import { cardLabel } from "@/lib/games/cards/deck";
+import { PlayingCard } from "@/components/board/PlayingCard";
 import { reportSoloResult } from "@/lib/results/report";
 
 const HUMAN = 0;
@@ -149,14 +150,13 @@ export function BabanukiSolo() {
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {h.map((c, i) => (
-                        <button
+                        <PlayingCard
                           key={c.id}
+                          card={c}
+                          variant="back"
                           disabled={!myTurn || idx !== oppForHuman}
                           onClick={() => humanDraw(i)}
-                          className="w-10 h-14 rounded bg-blue-600 text-white text-xs flex items-end justify-center pb-1 disabled:opacity-50 hover:bg-blue-700"
-                        >
-                          ?
-                        </button>
+                        />
                       ))}
                     </div>
                   </div>
@@ -169,12 +169,7 @@ export function BabanukiSolo() {
               <p className="text-sm font-medium mb-1">あなたの手札 ({state.hands[HUMAN].length}枚)</p>
               <div className="flex flex-wrap gap-1">
                 {state.hands[HUMAN].map((c) => (
-                  <span
-                    key={c.id}
-                    className="w-10 h-14 rounded bg-white border flex items-center justify-center text-sm"
-                  >
-                    {cardLabel(c)}
-                  </span>
+                  <PlayingCard key={c.id} card={c} variant="open" />
                 ))}
               </div>
             </div>

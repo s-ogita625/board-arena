@@ -16,20 +16,29 @@ interface Props {
   onMove: (from: Square, to: Square, promotion?: "q" | "r" | "b" | "n") => boolean;
   flipped?: boolean;
   disabled?: boolean;
+  /** 親側で手番を進めるたびに変わるキー。同一 game 参照の中身が変わった事を React に伝える */
+  versionKey?: number;
 }
 
-export function ChessBoard({ game, humanColor = "w", onMove, flipped = false, disabled }: Props) {
+export function ChessBoard({
+  game,
+  humanColor = "w",
+  onMove,
+  flipped = false,
+  disabled,
+  versionKey = 0,
+}: Props) {
   const [from, setFrom] = useState<Square | null>(null);
 
-  const board = useMemo(() => game.board(), [game]);
+  const board = useMemo(() => game.board(), [game, versionKey]);
   const rows = flipped ? [...board].reverse() : board;
-  const files = flipped ? ["h","g","f","e","d","c","b","a"] : ["a","b","c","d","e","f","g","h"];
+  const files = flipped ? ["h", "g", "f", "e", "d", "c", "b", "a"] : ["a", "b", "c", "d", "e", "f", "g", "h"];
 
   const legalTargets = useMemo(() => {
     if (!from) return new Set<string>();
     const moves = game.moves({ square: from, verbose: true }) as { to: string }[];
     return new Set(moves.map((m) => m.to));
-  }, [from, game]);
+  }, [from, game, versionKey]);
 
   function onSquareClick(sq: Square) {
     if (disabled) return;

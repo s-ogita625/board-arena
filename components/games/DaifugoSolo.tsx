@@ -14,6 +14,7 @@ import {
   type DaifugoState,
 } from "@/lib/games/cards/daifugo";
 import { cardLabel, type Card as PlayCard } from "@/lib/games/cards/deck";
+import { PlayingCard } from "@/components/board/PlayingCard";
 import { reportSoloResult } from "@/lib/results/report";
 
 const HUMAN = 0;
@@ -166,9 +167,7 @@ export function DaifugoSolo() {
               <div className="flex flex-wrap gap-1 min-h-[3rem] items-center">
                 {state.current
                   ? state.current.map((c) => (
-                      <span key={c.id} className="px-2 py-1 rounded bg-white border text-sm">
-                        {cardLabel(c)}
-                      </span>
+                      <PlayingCard key={c.id} card={c} variant="open" size="sm" />
                     ))
                   : <span className="text-xs text-slate-400">（場は流れています）</span>}
               </div>
@@ -186,20 +185,17 @@ export function DaifugoSolo() {
             </div>
 
             <div className="p-3 border rounded bg-amber-50 dark:bg-amber-950/30">
-              <p className="text-sm font-medium mb-1">あなたの手札</p>
+              <p className="text-sm font-medium mb-1">あなたの手札 ({state.hands[HUMAN].length}枚)</p>
               <div className="flex flex-wrap gap-1">
                 {state.hands[HUMAN].map((c: PlayCard) => (
-                  <button
+                  <PlayingCard
                     key={c.id}
-                    onClick={() => toggle(c.id)}
+                    card={c}
+                    variant="open"
+                    selected={selected.has(c.id)}
                     disabled={!myTurn}
-                    className={
-                      "px-2 py-1 rounded border text-sm bg-white " +
-                      (selected.has(c.id) ? "ring-2 ring-yellow-500 bg-yellow-100" : "")
-                    }
-                  >
-                    {cardLabel(c)}
-                  </button>
+                    onClick={() => toggle(c.id)}
+                  />
                 ))}
               </div>
             </div>

@@ -15,11 +15,12 @@ export function ChessSolo() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [level, setLevel] = useState(3);
   const [humanColor, setHumanColor] = useState<"w" | "b">("w");
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const [game] = useState(() => new Chess());
   const [resultMsg, setResultMsg] = useState<string | null>(null);
 
-  const aiTurn = useMemo(() => game.turn() !== humanColor, [game, humanColor, phase]);
+  // chess.js インスタンスは参照不変なので、内部状態の変化は tick で検知する
+  const aiTurn = useMemo(() => game.turn() !== humanColor, [game, humanColor, tick]);
 
   const finalize = useCallback(() => {
     let outcome: 0 | 0.5 | 1 = 0.5;
@@ -38,7 +39,8 @@ export function ChessSolo() {
     reportSoloResult({ game: "chess", outcome }).catch(() => {});
   }, [game, humanColor]);
 
-  // AI move loop
+  // AI move loop — tick も依存に入れて、AI が指した後 / プレイヤーが指した後の
+  // 両方で再評価し終局判定する
   useEffect(() => {
     if (phase !== "playing") return;
     if (game.isGameOver()) {
@@ -55,7 +57,7 @@ export function ChessSolo() {
       }, 350);
       return () => clearTimeout(t);
     }
-  }, [phase, aiTurn, game, level, finalize]);
+  }, [phase, aiTurn, tick, game, level, finalize]);
 
   function handleMove(from: Square, to: Square, promotion: "q" | "r" | "b" | "n" = "q") {
     if (phase !== "playing") return false;
@@ -113,12 +115,13 @@ export function ChessSolo() {
           onMove={handleMove}
           flipped={humanColor === "b"}
           disabled={phase !== "playing"}
+          versionKey={tick}
         />
         <Card className="flex-1">
           <CardHeader>
             <CardTitle>状況</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-2 text-sm" data-version={tick}>
             <p>あなた: {humanColor === "w" ? "白" : "黒"}</p>
             <p>手番: {game.turn() === "w" ? "白" : "黒"}</p>
             {game.inCheck() && <p className="text-red-600">王手！</p>}
