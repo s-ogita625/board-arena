@@ -96,13 +96,18 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
   }, [roomId, supabase, syncFromRow]);
 
   async function pushState(next: State, extra?: Partial<ShogiRoomState>) {
-    await supabase
-      .from("rooms")
-      .update({
+    // See comment in OnlineChess: writing via the service-role API avoids
+    // an RLS visibility lag where the browser-side UPDATE returns success
+    // but actually affects 0 rows, leaving the opponent stuck on the
+    // initial position.
+    await fetch("/api/game/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId,
         state: { kind: "shogi", state: next, ...extra },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", roomId);
+      }),
+    });
   }
 
   async function reportWinner(winnerId: string | null) {

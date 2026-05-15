@@ -93,18 +93,24 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
   }, [roomId, supabase, syncFromRow]);
 
   async function pushState(extra?: Partial<ChessRoomState>) {
-    await supabase
-      .from("rooms")
-      .update({
+    // Go through a server route that writes with the service role. The direct
+    // client UPDATE is subject to RLS visibility lag (the USING clause checks
+    // room_players, which can be invisible to the session for a few hundred
+    // ms after match creation). That made the UPDATE silently affect 0 rows
+    // and broke real-time propagation to the opponent's board.
+    await fetch("/api/game/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId,
         state: {
           kind: "chess",
           fen: game.fen(),
           history: game.history(),
           ...extra,
         },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", roomId);
+      }),
+    });
   }
 
   async function maybeReportEnd() {

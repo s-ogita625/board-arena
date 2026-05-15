@@ -34,15 +34,6 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
   const me = players.find((p) => p.seat === meSeat)!;
   const opp = players.find((p) => p.seat !== meSeat);
 
-  // Initialize state on mount (idempotent server-side)
-  useEffect(() => {
-    fetch("/api/cards/init", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomId }),
-    }).catch(() => {});
-  }, [roomId]);
-
   // Load + subscribe to public state
   const loadPublic = useCallback(async () => {
     const { data } = await supabase
@@ -66,6 +57,31 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
     if (data?.state) setPriv(data.state as BabanukiPrivate);
   }, [roomId, supabase]);
 
+  // Initialize state on mount (idempotent server-side). Await so we can
+  // re-load public/private right after init completes, instead of racing
+  // the initial loadPublic against the server write.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetch("/api/cards/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId }),
+        });
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled) {
+        loadPublic();
+        loadPrivate();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, loadPublic, loadPrivate]);
+
   useEffect(() => {
     loadPublic();
     loadPrivate();
@@ -87,7 +103,14 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
           loadPrivate();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // If we subscribed after init's UPDATE event already fired, we would
+        // miss it. Re-fetch on SUBSCRIBED to ensure we have the latest state.
+        if (status === "SUBSCRIBED") {
+          loadPublic();
+          loadPrivate();
+        }
+      });
     return () => {
       supabase.removeChannel(ch);
     };

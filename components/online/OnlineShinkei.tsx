@@ -33,14 +33,6 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
   const me = players.find((p) => p.seat === meSeat)!;
   const opp = players.find((p) => p.seat !== meSeat);
 
-  useEffect(() => {
-    fetch("/api/cards/init", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomId }),
-    }).catch(() => {});
-  }, [roomId]);
-
   const loadPublic = useCallback(async () => {
     const { data } = await supabase
       .from("rooms")
@@ -50,6 +42,29 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
     if (data?.public_state) setPub(data.public_state as ShinkeiPublic);
     if (data?.status === "finished") setFinished(true);
   }, [roomId, supabase]);
+
+  // Initialize state on mount. Await so we can re-load public state after the
+  // server write completes, instead of racing it.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetch("/api/cards/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId }),
+        });
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled) {
+        loadPublic();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, loadPublic]);
 
   useEffect(() => {
     loadPublic();
@@ -64,7 +79,13 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
           if (row.status === "finished") setFinished(true);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Re-fetch on SUBSCRIBED in case init's UPDATE event fired before we
+        // attached, which would otherwise leave pub stuck at null.
+       if (status === "SUBSCRIBED") {
+          loadPublic();
+        }
+      });
     return () => {
       supabase.removeChannel(ch);
     };
