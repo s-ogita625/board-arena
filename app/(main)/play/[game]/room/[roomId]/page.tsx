@@ -32,6 +32,26 @@ async function fetchRoomWithRetry(
   return null;
 }
 
+async function fetchPlayersWithRetry(
+  supabase: ReturnType<typeof createSupabaseServer>,
+  roomId: string,
+  myUserId: string,
+) {
+  // Same lag issue applies to `room_players`: their RLS policy requires the
+  // requester to already be a member of the room. Retry until we either see
+  // ourselves in the result or give up.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data } = await supabase
+      .from("room_players")
+      .select("user_id, seat, profiles!inner(username, avatar_url)")
+      .eq("room_id", roomId)
+      .order("seat", { ascending: true });
+    if (data && data.some((p) => p.user_id === myUserId)) return data;
+    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+  }
+  return null;
+}
+
 export default async function RoomPage({
   params,
 }: {
@@ -66,11 +86,29 @@ export default async function RoomPage({
   }
   if (!room) notFound();
 
-  const { data: players } = await supabase
-    .from("room_players")
-    .select("user_id, seat, profiles!inner(username, avatar_url)")
-    .eq("room_id", room.id)
-    .order("seat", { ascending: true });
+  let players = await fetchPlayersWithRetry(supabase, room.id, user.id);
+
+  // Final fallback for room_players: confirm membership via service-role and
+  // fetch the full participant list without RLS. Without this, both clients
+  // can briefly see "このルームには参加していません" right after match because
+  // their own room_players row isn't yet visible to their session.
+  if (!players) {
+    const admin = createSupabaseAdmin();
+    const { data: membership } = await admin
+      .from("room_players")
+      .select("room_id")
+      .eq("room_id", room.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membership) {
+      const { data: adminPlayers } = await admin
+        .from("room_players")
+        .select("user_id, seat, profiles!inner(username, avatar_url)")
+        .eq("room_id", room.id)
+        .order("seat", { ascending: true });
+      if (adminPlayers) players = adminPlayers;
+    }
+  }
 
   const playerList = (players ?? []).map((p) => ({
     user_id: p.user_id,
