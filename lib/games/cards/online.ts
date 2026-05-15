@@ -8,36 +8,29 @@
  */
 
 import type { Card } from "./deck";
+import type { Clock } from "../clock";
 
 /** ---------------- babanuki ---------------- */
 
 export interface BabanukiPublic {
   kind: "babanuki";
-  /** seats in turn order */
-  seats: string[]; // user ids by seat index
-  /** counts[i] = card count of seats[i] */
+  seats: string[];
   counts: number[];
-  /** index in seats whose turn it is (this player draws from prev seat) */
   turn: number;
-  /** seats that have finished (in order) */
   finished: string[];
-  /** if game over, winner_id (last loser is the one *not* finished); null if draw */
   winnerId?: string | null;
-  /** last drawn info, for UI feedback. Cleared on next move. */
   lastDraw?: {
     fromUserId: string;
     toUserId: string;
-    /** the card drawn (revealed to everyone after the draw resolves) */
     cardId: string;
     paired: boolean;
   };
-  /** monotonically increasing move counter (for client de-dup) */
   version: number;
+  clock?: Clock;
 }
 
 export interface BabanukiPrivate {
   kind: "babanuki";
-  /** my hand (sorted). Updated whenever the public state advances. */
   hand: Card[];
   version: number;
 }
@@ -47,45 +40,36 @@ export interface BabanukiPrivate {
 export interface ShinkeiPublic {
   kind: "shinkei";
   seats: string[];
-  /** board card ids in fixed positions; null when taken */
-  /** Public board reveals only when face-up; otherwise just `null` for hidden. */
-  /** length = 52 */
   positions: number;
-  /** Currently face-up (revealed) indices and their cards (revealed publicly) */
   revealed: { index: number; card: Card }[];
-  /** Permanently taken indices */
   taken: number[];
-  /** scores by seat */
   scores: number[];
   turn: number;
-  /** when both cards flipped and matched/no-match resolved, leave them visible briefly */
   pending?: { matched: boolean };
   winnerId?: string | null;
   version: number;
+  clock?: Clock;
 }
 
-/** Shinkei has no private state (everyone sees the same revealed board) */
 export interface ShinkeiPrivate {
   kind: "shinkei";
   version: number;
 }
 
-/** ---------------- daifugo (2-player simplified) ---------------- */
+/** ---------------- daifugo ---------------- */
 
 export interface DaifugoPublic {
   kind: "daifugo";
   seats: string[];
   counts: number[];
-  /** current pile top (face-up) */
   current: Card[] | null;
-  /** seat of last player who played a non-pass */
   lastSeat: number | null;
-  /** consecutive passes */
   passes: number;
   turn: number;
   finished: string[];
   winnerId?: string | null;
   version: number;
+  clock?: Clock;
 }
 
 export interface DaifugoPrivate {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import { shuffle, type Card } from "@/lib/games/cards/deck";
 import type { BabanukiPublic, BabanukiPrivate } from "@/lib/games/cards/online";
+import { newClock } from "@/lib/games/clock";
 
 /**
  * POST /api/cards/babanuki  body: { roomId: string, cardIndex: number }
@@ -139,6 +140,7 @@ export async function POST(req: Request) {
     },
     winnerId,
     version: pub.version + 1,
+    clock: isOver ? undefined : newClock("babanuki", nextTurn),
   };
 
   await admin.from("rooms").update({

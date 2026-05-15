@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server";
 import type { Card } from "@/lib/games/cards/deck";
 import type { ShinkeiPublic } from "@/lib/games/cards/online";
+import { newClock } from "@/lib/games/clock";
 
 /**
  * POST /api/cards/shinkei  body: { roomId: string, action: "flip", index: number }
@@ -61,6 +62,8 @@ export async function POST(req: Request) {
       ...pub,
       revealed: [...pub.revealed, { index: idx, card: priv.board[idx] }],
       version: pub.version + 1,
+      // 1 枚目をめくっただけならまだ同じ手番。クロックは継続。
+      clock: pub.clock,
     };
     await admin.from("rooms").update({
       public_state: newPub,
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
       pending: undefined,
       winnerId,
       version: pub.version + 1,
+      clock: isOver ? undefined : newClock("shinkei", nextTurn),
     };
     await admin.from("rooms").update({
       public_state: newPub,

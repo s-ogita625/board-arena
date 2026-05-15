@@ -16,6 +16,9 @@ import {
   type Side,
   type State,
 } from "@/lib/games/shogi/engine";
+import type { Clock } from "@/lib/games/clock";
+import { TurnTimer } from "@/components/common/TurnTimer";
+import { useResignOnUnload } from "@/lib/hooks/useResignOnUnload";
 
 interface PlayerInfo {
   user_id: string;
@@ -35,6 +38,7 @@ interface ShogiRoomState {
   kind: "shogi";
   state?: State;
   winnerId?: string | null;
+  clock?: Clock;
 }
 
 export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }: Props) {
@@ -43,7 +47,10 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
   const [state, setState] = useState<State>(() => initialState());
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
+  const [clock, setClock] = useState<Clock | undefined>(undefined);
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useResignOnUnload(roomId, finished);
 
   // Seat 0 plays Sente (先手), seat 1 plays Gote (後手)
   const humanSide: Side = meSeat === 0 ? "S" : "G";
@@ -54,6 +61,7 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
     (row: ShogiRoomState | null) => {
       if (!row) return;
       if (row.state) setState(row.state);
+      setClock(row.clock);
       if (row.winnerId !== undefined) {
         setFinished(true);
         if (row.winnerId === null) setMessage("引き分け");
@@ -63,6 +71,14 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
     },
     [me.user_id],
   );
+
+  const fireTimeout = useCallback(async () => {
+    await fetch("/api/game/timeout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId }),
+    }).catch(() => {});
+  }, [roomId]);
 
   // initial load + subscribe
   useEffect(() => {
@@ -166,11 +182,14 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン 将棋</h2>
-        <span className="text-sm text-slate-500">
-          あなた: {me.username} ({humanSide === "S" ? "先手" : "後手"}) vs {opp?.username ?? "—"}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">オンライン 将棋</h2>
+          <span className="text-sm text-slate-500">
+            あなた: {me.username} ({humanSide === "S" ? "先手" : "後手"}) vs {opp?.username ?? "—"}
+          </span>
+        </div>
+        <TurnTimer clock={clock} mySeat={meSeat} onExpire={fireTimeout} />
       </div>
       <div className="flex flex-col md:flex-row gap-6">
         <ShogiBoard
@@ -183,7 +202,6 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
           <CardHeader><CardTitle>状況</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>手番: {state.turn === "S" ? "先手" : "後手"}</p>
-            {isInCheck(state, state.turn) && <p className="text-red-600">王手！</p>}
             {message && <p className="text-lg font-semibold">{message}</p>}
             {!finished && (
               <Button variant="danger" onClick={resign}>投了</Button>

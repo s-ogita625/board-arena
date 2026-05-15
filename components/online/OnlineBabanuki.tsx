@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { PlayingCard } from "@/components/board/PlayingCard";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import type { BabanukiPublic, BabanukiPrivate } from "@/lib/games/cards/online";
+import { TurnTimer } from "@/components/common/TurnTimer";
+import { useResignOnUnload } from "@/lib/hooks/useResignOnUnload";
 
 interface PlayerInfo {
   user_id: string;
@@ -32,6 +34,16 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useResignOnUnload(roomId, finished);
+
+  const fireTimeout = useCallback(async () => {
+    await fetch("/api/game/timeout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId }),
+    }).catch(() => {});
+  }, [roomId]);
 
   // Broadcast a "poke" to the opponent so they re-fetch public/private state
   // even if postgres_changes can't make it through.
@@ -205,12 +217,15 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン ババ抜き ({N}人)</h2>
-        <span className="text-sm text-slate-500">あなた: {me.username}</span>
-        <span className="text-sm">
-          {finished ? "" : myTurn ? "あなたの手番" : `${turnUsername} の手番`}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">オンライン ババ抜き ({N}人)</h2>
+          <span className="text-sm text-slate-500">あなた: {me.username}</span>
+          <span className="text-sm ml-2">
+            {finished ? "" : myTurn ? "あなたの手番" : `${turnUsername} の手番`}
+          </span>
+        </div>
+        <TurnTimer clock={pub.clock} mySeat={meSeat} onExpire={fireTimeout} />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">

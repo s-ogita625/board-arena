@@ -8,6 +8,9 @@ import { ChessBoard } from "@/components/board/ChessBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
+import type { Clock } from "@/lib/games/clock";
+import { TurnTimer } from "@/components/common/TurnTimer";
+import { useResignOnUnload } from "@/lib/hooks/useResignOnUnload";
 
 interface PlayerInfo {
   user_id: string;
@@ -28,6 +31,7 @@ interface ChessRoomState {
   fen?: string;
   history?: string[]; // SAN list
   winnerId?: string | null;
+  clock?: Clock;
 }
 
 export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }: Props) {
@@ -40,7 +44,11 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
   const [tick, setTick] = useState(0);
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
+  const [clock, setClock] = useState<Clock | undefined>(undefined);
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Resign on tab close so a task-kill counts as a loss for the leaver.
+  useResignOnUnload(roomId, finished);
 
   // Seat 0 plays white, seat 1 plays black
   const humanColor: "w" | "b" = meSeat === 0 ? "w" : "b";
@@ -54,6 +62,7 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
         try { game.load(state.fen); } catch { /* ignore */ }
         setTick((n) => n + 1);
       }
+      setClock(state.clock);
       if (state.winnerId !== undefined) {
         setFinished(true);
         if (state.winnerId === null) setMessage("引き分け");
@@ -63,6 +72,14 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
     },
     [game, me.user_id],
   );
+
+  const fireTimeout = useCallback(async () => {
+    await fetch("/api/game/timeout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId }),
+    }).catch(() => {});
+  }, [roomId]);
 
   // initial load + subscribe
   useEffect(() => {
@@ -181,11 +198,14 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">オンライン チェス</h2>
-        <span className="text-sm text-slate-500">
-          あなた: {me.username} ({humanColor === "w" ? "白" : "黒"}) vs {opp?.username ?? "—"}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">オンライン チェス</h2>
+          <span className="text-sm text-slate-500">
+            あなた: {me.username} ({humanColor === "w" ? "白" : "黒"}) vs {opp?.username ?? "—"}
+          </span>
+        </div>
+        <TurnTimer clock={clock} mySeat={meSeat} onExpire={fireTimeout} />
       </div>
       <div className="flex flex-col md:flex-row gap-6">
         <ChessBoard
@@ -200,7 +220,6 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
           <CardHeader><CardTitle>状況</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>手番: {game.turn() === "w" ? "白" : "黒"}</p>
-            {game.inCheck() && <p className="text-red-600">王手！</p>}
             {message && <p className="text-lg font-semibold">{message}</p>}
             {!finished && (
               <Button variant="danger" onClick={resign}>投了</Button>

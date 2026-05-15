@@ -3,6 +3,7 @@ import { createSupabaseServer, createSupabaseAdmin } from "@/lib/supabase/server
 import type { Card } from "@/lib/games/cards/deck";
 import type { DaifugoPublic, DaifugoPrivate } from "@/lib/games/cards/online";
 import { legalPlays, rankStrength } from "@/lib/games/cards/daifugo";
+import { newClock } from "@/lib/games/clock";
 
 /**
  * POST /api/cards/daifugo  body: { roomId, action: "play", cardIds: string[] }
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
     finished: finishSeats,
     winnerId,
     version: pub.version + 1,
+    clock: isOver ? undefined : newClock("daifugo", nextTurn),
   };
 
   await admin.from("rooms").update({

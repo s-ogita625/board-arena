@@ -9,6 +9,7 @@ import type {
   DaifugoPublic,
   DaifugoPrivate,
 } from "@/lib/games/cards/online";
+import { newClock } from "@/lib/games/clock";
 
 /**
  * POST /api/cards/init  body: { roomId }
@@ -60,8 +61,8 @@ export async function POST(req: Request) {
     .select("user_id, seat")
     .eq("room_id", room.id)
     .order("seat", { ascending: true });
-  if (!players || players.length !== 2) {
-    return NextResponse.json({ error: "not 2-player room" }, { status: 400 });
+  if (!players || players.length < 2 || players.length > 4) {
+    return NextResponse.json({ error: "need 2-4 players" }, { status: 400 });
   }
   if (!players.find((p) => p.user_id === user.id)) {
     return NextResponse.json({ error: "not a participant" }, { status: 403 });
@@ -93,10 +94,12 @@ export async function POST(req: Request) {
 
   const seatIds = players.map((p) => p.user_id);
 
+  const N = seatIds.length;
+
   if (room.game === "babanuki") {
     const deck = shuffle(buildDeck(1));
-    const hands: Card[][] = [[], []];
-    deck.forEach((c, i) => hands[i % 2].push(c));
+    const hands: Card[][] = Array.from({ length: N }, () => [] as Card[]);
+    deck.forEach((c, i) => hands[i % N].push(c));
     const reduced = hands.map(discardPairs);
     const pub: BabanukiPublic = {
       kind: "babanuki",
@@ -105,14 +108,14 @@ export async function POST(req: Request) {
       turn: 0,
       finished: [],
       version: 1,
+      clock: newClock("babanuki", 0),
     };
     await admin.from("rooms").update({
       state: { kind: "babanuki", hands: reduced },
       public_state: pub,
       updated_at: new Date().toISOString(),
     }).eq("id", room.id);
-    // private rows
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < N; i++) {
       const priv: BabanukiPrivate = { kind: "babanuki", hand: reduced[i], version: 1 };
       await admin.from("room_private_state").upsert(
         { room_id: room.id, user_id: seatIds[i], state: priv },
@@ -130,16 +133,17 @@ export async function POST(req: Request) {
       positions: cards.length,
       revealed: [],
       taken: [],
-      scores: [0, 0],
+      scores: Array(N).fill(0),
       turn: 0,
       version: 1,
+      clock: newClock("shinkei", 0),
     };
     await admin.from("rooms").update({
       state: { kind: "shinkei", board: cards },
       public_state: pub,
       updated_at: new Date().toISOString(),
     }).eq("id", room.id);
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < N; i++) {
       const priv: ShinkeiPrivate = { kind: "shinkei", version: 1 };
       await admin.from("room_private_state").upsert(
         { room_id: room.id, user_id: seatIds[i], state: priv },
@@ -151,8 +155,8 @@ export async function POST(req: Request) {
 
   if (room.game === "daifugo") {
     const deck = shuffle(buildDeck(1));
-    const hands: Card[][] = [[], []];
-    deck.forEach((c, i) => hands[i % 2].push(c));
+    const hands: Card[][] = Array.from({ length: N }, () => [] as Card[]);
+    deck.forEach((c, i) => hands[i % N].push(c));
     const pub: DaifugoPublic = {
       kind: "daifugo",
       seats: seatIds,
@@ -163,13 +167,14 @@ export async function POST(req: Request) {
       turn: 0,
       finished: [],
       version: 1,
+      clock: newClock("daifugo", 0),
     };
     await admin.from("rooms").update({
       state: { kind: "daifugo", hands },
       public_state: pub,
       updated_at: new Date().toISOString(),
     }).eq("id", room.id);
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < N; i++) {
       const priv: DaifugoPrivate = { kind: "daifugo", hand: hands[i], version: 1 };
       await admin.from("room_private_state").upsert(
         { room_id: room.id, user_id: seatIds[i], state: priv },
