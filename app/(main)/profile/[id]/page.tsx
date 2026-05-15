@@ -1,8 +1,18 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { GAMES, gameLabel } from "@/lib/utils";
+import { GAMES, gameLabel, isGameId, type GameId } from "@/lib/utils";
 import { ProfileEditor } from "./editor";
+
+interface RecentMatch {
+  id: string;
+  game: GameId;
+  winner_id: string | null;
+  created_at: string;
+  rating_changes: Record<string, number>;
+  opponents: { user_id: string; username: string }[];
+}
 
 export default async function ProfilePage({ params }: { params: { id: string } }) {
   const supabase = createSupabaseServer();
@@ -20,6 +30,57 @@ export default async function ProfilePage({ params }: { params: { id: string } }
     .from("game_stats")
     .select("game, rating, wins, losses, draws")
     .eq("user_id", params.id);
+
+  // --- 最近の対局（オンラインのみ）---
+  const { data: myRoomRows } = await supabase
+    .from("room_players")
+    .select("room_id")
+    .eq("user_id", params.id);
+  const myRoomIds = (myRoomRows ?? []).map((r) => r.room_id);
+
+  let recent: RecentMatch[] = [];
+  if (myRoomIds.length > 0) {
+    const { data: results } = await supabase
+      .from("match_results")
+      .select("id, room_id, game, winner_id, rating_changes, created_at")
+      .in("room_id", myRoomIds)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    const resultRoomIds = (results ?? [])
+      .map((r) => r.room_id)
+      .filter((v): v is string => !!v);
+    const participantMap = new Map<string, { user_id: string; username: string }[]>();
+    if (resultRoomIds.length > 0) {
+      const { data: rp } = await supabase
+        .from("room_players")
+        .select("room_id, user_id, profiles!inner(username)")
+        .in("room_id", resultRoomIds);
+      for (const row of rp ?? []) {
+        const arr = participantMap.get(row.room_id) ?? [];
+        arr.push({
+          user_id: row.user_id,
+          username: (row as any).profiles?.username ?? "player",
+        });
+        participantMap.set(row.room_id, arr);
+      }
+    }
+
+    recent = (results ?? [])
+      .filter((r) => isGameId(r.game))
+      .map((r) => {
+        const all = participantMap.get(r.room_id ?? "") ?? [];
+        const opponents = all.filter((p) => p.user_id !== params.id);
+        return {
+          id: r.id,
+          game: r.game as GameId,
+          winner_id: r.winner_id,
+          created_at: r.created_at,
+          rating_changes: (r.rating_changes ?? {}) as Record<string, number>,
+          opponents,
+        };
+      });
+  }
 
   const isMe = user?.id === profile.id;
   const statsMap = new Map((stats ?? []).map((s) => [s.game, s]));
@@ -111,6 +172,79 @@ export default async function ProfilePage({ params }: { params: { id: string } }
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>最近の対局 (オンライン)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recent.length === 0 ? (
+            <p className="text-sm text-slate-500">まだオンライン対局の記録がありません。</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {recent.map((m) => {
+                const delta = m.rating_changes[params.id];
+                const result =
+                  m.winner_id === null
+                    ? "△ 引き分け"
+                    : m.winner_id === params.id
+                    ? "○ 勝利"
+                    : "× 敗北";
+                const resultClass =
+                  m.winner_id === null
+                    ? "text-slate-500"
+                    : m.winner_id === params.id
+                    ? "text-emerald-600"
+                    : "text-rose-600";
+                return (
+                  <li
+                    key={m.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0"
+                  >
+                    <span className="text-xs text-slate-400 font-mono w-24">
+                      {new Date(m.created_at).toLocaleDateString("ja-JP", {
+                        month: "2-digit",
+                        day: "2-digit",
+                      })}
+                    </span>
+                    <span className="font-medium w-20">{gameLabel(m.game)}</span>
+                    <span className={`font-semibold w-16 ${resultClass}`}>{result}</span>
+                    <span className="text-slate-500">
+                      vs{" "}
+                      {m.opponents.length === 0
+                        ? "—"
+                        : m.opponents.map((o, i) => (
+                            <span key={o.user_id}>
+                              {i > 0 && ", "}
+                              <Link
+                                href={`/profile/${o.user_id}`}
+                                className="underline hover:text-brand"
+                              >
+                                {o.username}
+                              </Link>
+                            </span>
+                          ))}
+                    </span>
+                    {typeof delta === "number" && (
+                      <span
+                        className={`ml-auto font-mono text-xs ${
+                          delta > 0
+                            ? "text-emerald-600"
+                            : delta < 0
+                            ? "text-rose-600"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>
