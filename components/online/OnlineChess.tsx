@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Chess, type Square } from "chess.js";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ChessBoard } from "@/components/board/ChessBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
   const [, setTick] = useState(0);
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   // Seat 0 plays white, seat 1 plays black
   const humanColor: "w" | "b" = meSeat === 0 ? "w" : "b";
@@ -75,7 +77,7 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
     })();
 
     const ch = supabase
-      .channel(`room:${roomId}`)
+      .channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
@@ -85,32 +87,47 @@ export function OnlineChess({ roomId, meSeat, players, finished: finishedInit }:
           if (newRow.status === "finished") setFinished(true);
         },
       )
+      // Broadcast fallback: opponents publish to this channel after writing
+      // their move via /api/game/move, so we always receive it even when
+      // postgres_changes can't make it through.
+      .on("broadcast", { event: "state" }, (msg) => {
+        const state = (msg.payload as { state?: ChessRoomState } | undefined)?.state;
+        if (state) syncFromRow(state);
+      })
       .subscribe();
+    channelRef.current = ch;
     return () => {
       mounted = false;
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [roomId, supabase, syncFromRow]);
 
   async function pushState(extra?: Partial<ChessRoomState>) {
-    // Go through a server route that writes with the service role. The direct
-    // client UPDATE is subject to RLS visibility lag (the USING clause checks
-    // room_players, which can be invisible to the session for a few hundred
-    // ms after match creation). That made the UPDATE silently affect 0 rows
-    // and broke real-time propagation to the opponent's board.
+    const state: ChessRoomState = {
+      kind: "chess",
+      fen: game.fen(),
+      history: game.history(),
+      ...extra,
+    };
+    // Server-side update via service role to avoid RLS visibility lag on
+    // browser-side rooms.update.
     await fetch("/api/game/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roomId,
-        state: {
-          kind: "chess",
-          fen: game.fen(),
-          history: game.history(),
-          ...extra,
-        },
-      }),
+      body: JSON.stringify({ roomId, state }),
     });
+    // Broadcast as a safety net for the opponent, in case postgres_changes
+    // isn't delivering UPDATE events on the boardarena schema.
+    try {
+      await channelRef.current?.send({
+        type: "broadcast",
+        event: "state",
+        payload: { state },
+      });
+    } catch {
+      /* postgres_changes is the primary path; ignore broadcast errors */
+    }
   }
 
   async function maybeReportEnd() {

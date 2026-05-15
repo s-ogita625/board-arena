@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlayingCard } from "@/components/board/PlayingCard";
@@ -29,6 +30,15 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  const pokeOpponent = useCallback(async () => {
+    try {
+      await channelRef.current?.send({ type: "broadcast", event: "poke", payload: {} });
+    } catch {
+      /* primary path is postgres_changes; ignore */
+    }
+  }, []);
 
   const me = players.find((p) => p.seat === meSeat)!;
   const opp = players.find((p) => p.seat !== meSeat);
@@ -58,18 +68,19 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
         /* ignore */
       }
       if (!cancelled) {
-        loadPublic();
+        await loadPublic();
+        await pokeOpponent();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [roomId, loadPublic]);
+  }, [roomId, loadPublic, pokeOpponent]);
 
   useEffect(() => {
     loadPublic();
     const ch = supabase
-      .channel(`room:${roomId}:shinkei`)
+      .channel(`room:${roomId}:shinkei`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
@@ -79,14 +90,17 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
           if (row.status === "finished") setFinished(true);
         },
       )
+      .on("broadcast", { event: "poke" }, () => {
+        loadPublic();
+      })
       .subscribe((status) => {
-        // Re-fetch on SUBSCRIBED in case init's UPDATE event fired before we
-        // attached, which would otherwise leave pub stuck at null.
-       if (status === "SUBSCRIBED") {
+        if (status === "SUBSCRIBED") {
           loadPublic();
         }
       });
+    channelRef.current = ch;
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [roomId, supabase, loadPublic]);
@@ -108,14 +122,18 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
     if (pub.revealed.length !== 2) return;
     if (pub.turn !== meSeat) return;
     const t = setTimeout(async () => {
-      await fetch("/api/cards/shinkei", {
+      const res = await fetch("/api/cards/shinkei", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, action: "resolve" }),
       });
+      if (res.ok) {
+        await loadPublic();
+        await pokeOpponent();
+      }
     }, 1500);
     return () => clearTimeout(t);
-  }, [pub, finished, meSeat, roomId]);
+  }, [pub, finished, meSeat, roomId, loadPublic, pokeOpponent]);
 
   async function flip(idx: number) {
     if (busy || finished || !pub) return;
@@ -133,6 +151,9 @@ export function OnlineShinkei({ roomId, meSeat, players, finished: finishedInit 
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         setMessage(`エラー: ${j?.error ?? res.statusText}`);
+      } else {
+        await loadPublic();
+        await pokeOpponent();
       }
     } finally {
       setBusy(false);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlayingCard } from "@/components/board/PlayingCard";
@@ -30,6 +31,17 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Broadcast a "poke" to the opponent so they re-fetch public/private state
+  // even if postgres_changes can't make it through.
+  const pokeOpponent = useCallback(async () => {
+    try {
+      await channelRef.current?.send({ type: "broadcast", event: "poke", payload: {} });
+    } catch {
+      /* primary path is postgres_changes; ignore */
+    }
+  }, []);
 
   const me = players.find((p) => p.seat === meSeat)!;
   const opp = players.find((p) => p.seat !== meSeat);
@@ -73,20 +85,22 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
         /* ignore */
       }
       if (!cancelled) {
-        loadPublic();
-        loadPrivate();
+        await loadPublic();
+        await loadPrivate();
+        // Notify the opponent that init+state is now in DB.
+        await pokeOpponent();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [roomId, loadPublic, loadPrivate]);
+  }, [roomId, loadPublic, loadPrivate, pokeOpponent]);
 
   useEffect(() => {
     loadPublic();
     loadPrivate();
     const ch = supabase
-      .channel(`room:${roomId}:baba`)
+      .channel(`room:${roomId}:baba`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
@@ -103,15 +117,21 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
           loadPrivate();
         },
       )
+      // Broadcast fallback: any peer who just performed an action will send a
+      // poke; we respond by re-fetching, so we don't depend on postgres_changes.
+      .on("broadcast", { event: "poke" }, () => {
+        loadPublic();
+        loadPrivate();
+      })
       .subscribe((status) => {
-        // If we subscribed after init's UPDATE event already fired, we would
-        // miss it. Re-fetch on SUBSCRIBED to ensure we have the latest state.
         if (status === "SUBSCRIBED") {
           loadPublic();
           loadPrivate();
         }
       });
+    channelRef.current = ch;
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [roomId, supabase, loadPublic, loadPrivate]);
@@ -140,6 +160,10 @@ export function OnlineBabanuki({ roomId, meSeat, players, finished: finishedInit
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         setMessage(`エラー: ${j?.error ?? res.statusText}`);
+      } else {
+        await loadPublic();
+        await loadPrivate();
+        await pokeOpponent();
       }
     } finally {
       setBusy(false);

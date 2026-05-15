@@ -86,7 +86,10 @@ export async function POST(req: Request) {
         status: "playing",
         max_players: 2,
         state: { kind: game, history: [] },
-        public_state: { kind: game },
+        // public_state is intentionally left null here. Writing a stub like
+        // { kind: game } caused /api/cards/init to early-return on its
+        // idempotency check (which only compared `kind`), so deck/hands were
+        // never generated for card games. Init is the only owner of public_state.
       })
       .select("id")
       .single();

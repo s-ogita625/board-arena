@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { ShogiBoard } from "@/components/board/ShogiBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
   const [state, setState] = useState<State>(() => initialState());
   const [finished, setFinished] = useState(finishedInit);
   const [message, setMessage] = useState<string | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   // Seat 0 plays Sente (先手), seat 1 plays Gote (後手)
   const humanSide: Side = meSeat === 0 ? "S" : "G";
@@ -78,7 +80,7 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
     })();
 
     const ch = supabase
-      .channel(`room:${roomId}`)
+      .channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
@@ -88,26 +90,37 @@ export function OnlineShogi({ roomId, meSeat, players, finished: finishedInit }:
           if (newRow.status === "finished") setFinished(true);
         },
       )
+      .on("broadcast", { event: "state" }, (msg) => {
+        const s = (msg.payload as { state?: ShogiRoomState } | undefined)?.state;
+        if (s) syncFromRow(s);
+      })
       .subscribe();
+    channelRef.current = ch;
     return () => {
       mounted = false;
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [roomId, supabase, syncFromRow]);
 
   async function pushState(next: State, extra?: Partial<ShogiRoomState>) {
-    // See comment in OnlineChess: writing via the service-role API avoids
-    // an RLS visibility lag where the browser-side UPDATE returns success
-    // but actually affects 0 rows, leaving the opponent stuck on the
-    // initial position.
+    const payloadState: ShogiRoomState = { kind: "shogi", state: next, ...extra };
+    // Server-side update via service role (bypasses RLS visibility lag).
     await fetch("/api/game/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roomId,
-        state: { kind: "shogi", state: next, ...extra },
-      }),
+      body: JSON.stringify({ roomId, state: payloadState }),
     });
+    // Broadcast safety net in case postgres_changes doesn't reach opponent.
+    try {
+      await channelRef.current?.send({
+        type: "broadcast",
+        event: "state",
+        payload: { state: payloadState },
+      });
+    } catch {
+      /* primary path is postgres_changes; ignore */
+    }
   }
 
   async function reportWinner(winnerId: string | null) {

@@ -67,9 +67,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "not a participant" }, { status: 403 });
   }
 
-  // Idempotency: if public_state already has matching kind, no-op.
-  const ps = (room.public_state ?? null) as { kind?: string } | null;
-  if (ps && ps.kind === room.game) {
+  // Idempotency: only treat as initialized if the public_state actually has
+  // the game-specific fields we generate below. A previous bug created stubs
+  // like { kind: "babanuki" } via /api/match, which would otherwise let init
+  // early-return before generating the deck/hands.
+  const ps = (room.public_state ?? null) as {
+    kind?: string;
+    counts?: unknown;
+    seats?: unknown;
+    positions?: unknown;
+    revealed?: unknown;
+  } | null;
+  const fullyInitialized =
+    ps !== null &&
+    ps.kind === room.game &&
+    Array.isArray(ps.seats) &&
+    ((room.game === "babanuki" && Array.isArray(ps.counts)) ||
+      (room.game === "daifugo" && Array.isArray(ps.counts)) ||
+      (room.game === "shinkei" &&
+        typeof ps.positions === "number" &&
+        Array.isArray(ps.revealed)));
+  if (fullyInitialized) {
     return NextResponse.json({ ok: true, alreadyInitialized: true });
   }
 

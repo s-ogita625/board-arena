@@ -55,5 +55,8 @@ export async function POST(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  // The client is expected to broadcast to its room channel after this call
+  // returns so that the opponent gets the update even if postgres_changes
+  // isn't being delivered (e.g. publication / RLS issues on a custom schema).
   return NextResponse.json({ ok: true });
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlayingCard } from "@/components/board/PlayingCard";
@@ -32,6 +33,15 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  const pokeOpponent = useCallback(async () => {
+    try {
+      await channelRef.current?.send({ type: "broadcast", event: "poke", payload: {} });
+    } catch {
+      /* primary path is postgres_changes; ignore */
+    }
+  }, []);
 
   const me = players.find((p) => p.seat === meSeat)!;
   const opp = players.find((p) => p.seat !== meSeat);
@@ -73,20 +83,21 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
         /* ignore */
       }
       if (!cancelled) {
-        loadPublic();
-        loadPrivate();
+        await loadPublic();
+        await loadPrivate();
+        await pokeOpponent();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [roomId, loadPublic, loadPrivate]);
+  }, [roomId, loadPublic, loadPrivate, pokeOpponent]);
 
   useEffect(() => {
     loadPublic();
     loadPrivate();
     const ch = supabase
-      .channel(`room:${roomId}:daifugo`)
+      .channel(`room:${roomId}:daifugo`, { config: { broadcast: { self: false } } })
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "boardarena", table: "rooms", filter: `id=eq.${roomId}` },
@@ -104,15 +115,19 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
           setSelected([]);
         },
       )
+      .on("broadcast", { event: "poke" }, () => {
+        loadPublic();
+        loadPrivate();
+      })
       .subscribe((status) => {
-        // Re-fetch on SUBSCRIBED in case init's UPDATE event fired before we
-        // attached, which would otherwise leave pub stuck at null.
         if (status === "SUBSCRIBED") {
           loadPublic();
           loadPrivate();
         }
       });
+    channelRef.current = ch;
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [roomId, supabase, loadPublic, loadPrivate]);
@@ -160,6 +175,9 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
         setMessage(`エラー: ${j?.error ?? res.statusText}`);
       } else {
         setSelected([]);
+        await loadPublic();
+        await loadPrivate();
+        await pokeOpponent();
       }
     } finally {
       setBusy(false);
@@ -170,12 +188,17 @@ export function OnlineDaifugo({ roomId, meSeat, players, finished: finishedInit 
     if (busy || !isMyTurn) return;
     setBusy(true);
     try {
-      await fetch("/api/cards/daifugo", {
+      const res = await fetch("/api/cards/daifugo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, action: "pass" }),
       });
       setSelected([]);
+      if (res.ok) {
+        await loadPublic();
+        await loadPrivate();
+        await pokeOpponent();
+      }
     } finally {
       setBusy(false);
     }
